@@ -11,20 +11,20 @@
 				   (apply map f (cdr l) (map-loop cdr ls))))))))
       map-loop)))
 
-; https://scheme.com/tspl4/control.html#./control:s38
 (define fold-left
-  ; implement this!!!
-  '())
+  #;(Add your implementation here
+     Note: The file won't compile like this, beacuase your tag-parser requires define to have a second expression.
+     This is on purpose, so you don't compile the library without completing this implementation by mistake.))
 
-; https://scheme.com/tspl4/control.html#./control:s41
 (define fold-right
-  ; implement this!!!
-  '())
+  #;(Add your implementation here
+     Note: The file won't compile like this, beacuase your tag-parser requires define to have a second expression.
+     This is on purpose, so you don't compile the library without completing this implementation by mistake.))
 
-; https://scheme.com/tspl4/objects.html#./objects:s44
 (define cons*
-  ; implement this!!!
-  '())
+  #;(Add your implementation here
+     Note: The file won't compile like this, beacuase your tag-parser requires define to have a second expression.
+     This is on purpose, so you don't compile the library without completing this implementation by mistake.))
 
 (define append
   (let ((null? null?)
