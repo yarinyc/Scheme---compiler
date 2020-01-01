@@ -20,11 +20,11 @@ module type CODE_GEN = sig
      - The keys are the fvar names as strings
      - The values are the offsets from the base fvars_table address in bytes
      For example: [("boolean?", 0)]
-   *)  
+   *)
   val make_fvars_tbl : expr' list -> (string * int) list
 
   (* This signature represents the idea of outputing assembly code as a string
-     for a single AST', given the full constants and fvars tables. 
+     for a single AST', given the full constants and fvars tables.
    *)
   val generate : (constant * (int * string)) list -> (string * int) list -> expr' -> string
 end;;
