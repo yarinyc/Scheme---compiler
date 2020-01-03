@@ -18,18 +18,18 @@
 %define CHAR_SPACE 32
 %define CHAR_DOUBLEQUOTE 34
 %define CHAR_BACKSLASH 92
-	
+
 %define TYPE_SIZE 1
 %define WORD_SIZE 8
-	
+
 %define KB(n) n*1024
 %define MB(n) 1024*KB(n)
 %define GB(n) 1024*MB(n)
 
 
 %macro SKIP_TYPE_TAG 2
-	mov %1, qword [%2+TYPE_SIZE]	
-%endmacro	
+	mov %1, qword [%2+TYPE_SIZE]
+%endmacro
 
 %define INT_VAL SKIP_TYPE_TAG
 
@@ -58,7 +58,7 @@
 %define CLOSURE_CODE CDR
 
 %define PVAR(n) qword [rbp+(4+n)*WORD_SIZE]
-	
+
 %define SOB_UNDEFINED T_UNDEFINED
 %define SOB_NIL T_NIL
 %define SOB_VOID T_VOID
@@ -74,7 +74,7 @@
 	sub %1, [rsp]
 	add rsp, 8
 %endmacro
-	
+
 ; Creates a short SOB with the
 ; value %2
 ; Returns the result in register %1
