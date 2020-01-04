@@ -75,6 +75,39 @@
 	add rsp, 8
 %endmacro
 
+;*** macros from RS9: ***
+%macro MAKE_LITERAL 2
+			; Make a literal of type %1
+	db %1	; followed by the definition %2
+	%2
+%endmacro
+
+%define MAKE_LITERAL_INT(val) MAKE_LITERAL T_INTEGER, dq val
+%define MAKE_LITERAL_FLOAT(val) MAKE_LITERAL T_INTEGER, dq val
+%define MAKE_LITERAL_CHAR(val) MAKE_LITERAL T_CHAR, db val
+%define MAKE_NIL db T_NIL
+%define MAKE_VOID db T_VOID
+%define MAKE_BOOL(val) MAKE_LITERAL T_BOOL, db val
+%define MAKE_SYMBOL(val) MAKE_LITERAL T_SYMBOL dq val
+%macro MAKE_LITERAL_STRING 1
+	db T_STRING
+	dq (%%end_str- %%str)
+	%%str:
+		db %1
+	%%end_str:
+%endmacro
+;;; Creates a literal SOB with tag %1
+;;; from two pointers %2 and %3
+%macro MAKE_WORDS_LIT 3
+	db %1
+	dq %2
+	dq %3
+%endmacro
+%define MAKE_LITERAL_PAIR(car, cdr)
+	MAKE_WORDS_LIT T_PAIR, car, cdr
+
+;*** end of macros from RS9 ***
+
 ; Creates a short SOB with the
 ; value %2
 ; Returns the result in register %1
