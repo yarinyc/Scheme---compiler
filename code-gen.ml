@@ -2,6 +2,8 @@
 open Semantics;;
 
 exception X_code_gen_error of string;;
+exception X_debug of constant;;
+
 
 (* This module is here for you convenience only!
    You are not required to use it.
@@ -16,7 +18,7 @@ module type CODE_GEN = sig
          of the constant value
      For example: [(Sexpr(Nil), (1, "SOB_NIL"))]
    *)
-  val make_consts_tbl : expr' list -> (sexpr * (int * string)) list
+  val make_consts_tbl : expr' list -> (constant * (int * string)) list
 
   (* This signature assumes the structure of the fvars table is
      a list of key-value pairs:
@@ -36,10 +38,11 @@ module type CODE_GEN = sig
 end;;
 
 module Code_Gen : CODE_GEN = struct
-
+  (* aux functions: *)
   let car (x,y) = x;;
   let cdr (x,y) = y;;
 
+  (* rename all tagged expressions: *)
   let rename exprList counterList =
     let rec run exprList =
       match exprList with
@@ -99,8 +102,9 @@ module Code_Gen : CODE_GEN = struct
                                ApplicTP'(newOp, (List.map renameAST args)) in
 
     run exprList;;
-
+  (* main aux function for make_consts_tbl: *)
   let aux_make_consts_tbl asts taggedCollection constTbl counter =
+
     (* ------> second pass: *)
     let aux_secondPass asts =
       let rec secondPass asts =
@@ -140,31 +144,37 @@ module Code_Gen : CODE_GEN = struct
 
       and addToConst sexp =
         match sexp with
-        | Number(Int(x)) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[(sexp,(!counter, (Printf.sprintf "MAKE_LITERAL_INT(%d)\n" x)))]; (counter := (!counter) + 9))
-        | Number(Float(x)) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[(sexp,(!counter, (Printf.sprintf "MAKE_LITERAL_FLOAT(%f)\n" x)))]; (counter := (!counter) + 9))
+        | Number(Int(x)) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_INT(%d)\n" x)))]; (counter := (!counter) + 9))
+        | Number(Float(x)) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_FLOAT(%f)\n" x)))]; (counter := (!counter) + 9))
         | Bool(x) -> ()
         | Nil -> ()
-        | Char(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[(sexp,(!counter, (Printf.sprintf "MAKE_LITERAL_CHAR(%c)\n" x)))]; (counter := (!counter) + 2))
-        | String(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[(sexp,(!counter, (Printf.sprintf "MAKE_LITERAL_STRING(%s)\n" x)))]; (counter := (!counter) + 9 + (String.length x)))
-        | Symbol(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[(sexp,(!counter, (Printf.sprintf "MAKE_LITERAL_SYMBOL(const_tbl+%d)\n" (findPtr x constTbl))))]; (counter := (!counter) + 9))
+        | Char(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_CHAR(%c)\n" x)))]; (counter := (!counter) + 2))
+        | String(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_STRING(\"%s\")\n" x)))]; (counter := (!counter) + 9 + (String.length x)))
+        | Symbol(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_SYMBOL(const_tbl+%d)\n" (findPtr x constTbl))))]; (counter := (!counter) + 9))
         | Pair(x,y) -> (addToConst x);
                       (addToConst y);
-                      (if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[(sexp,(!counter, (Printf.sprintf "MAKE_LITERAL_PAIR(const_tbl+%d,const_tbl+%d)\n" (getOffset x) (getOffset y))))]; (counter := (!counter) + 17)))
+                      (if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_PAIR(const_tbl+%d,const_tbl+%d)\n" (getOffset x) (getOffset y))))]; (counter := (!counter) + 17)))
         | TaggedSexpr(name,sexp) -> ((collectTags name sexp);(addToConst sexp))
         | TagRef(x) -> ()
 
       and member exp list =
+        (* let newExp = match exp with | Sexpr(x) -> x | _-> raise (X_code_gen_error "member expected only type sexpr") in *)
         match list with
         | [] -> false
-        | x::xs -> if(sexpr_eq (car x) exp) then true else (member exp xs)
+        | (Void,(off,str))::xs -> (member exp xs)
+        | x::xs -> let currExp = match (car x) with | Sexpr(x) -> x | _-> raise (X_code_gen_error "member expected only type sexpr") in
+                if(sexpr_eq currExp exp) then true else (member exp xs)
 
       and find exp list =
         match list with
         | [] -> None
-        | x::xs -> if(sexpr_eq (car x) exp) then Some (x) else (find exp xs)
+        | (Void,(off,str))::xs -> (find exp xs)
+        | x::xs -> let currExp = match (car x) with | Sexpr(x) -> x | _-> raise (X_code_gen_error "find expected only type sexpr") in
+                   if(sexpr_eq currExp exp) then Some (x) else (find exp xs)
 
       and getOffset exp =
-        let res = find exp (!constTbl) in
+        let toSearch = (match exp with | TaggedSexpr(name,sexp) -> sexp | _ -> exp) in
+        let res = find toSearch (!constTbl) in
         match res with
         | None -> (-1)
         | Some(x,(off,str)) -> off
@@ -173,14 +183,16 @@ module Code_Gen : CODE_GEN = struct
         let currCounter = (ref 0) in
         let found = (find (String(str)) (!list)) in
         match found with
-        | None -> (constTbl:= !constTbl@[((String(str)), ((!counter), (Printf.sprintf "MAKE_LITERAL_STRING(%s)\n" str)))];
+        | None -> (constTbl:= !constTbl@[((Sexpr(String(str))), ((!counter), (Printf.sprintf "MAKE_LITERAL_STRING(\"%s\")\n" str)))];
                   currCounter := (!counter);
                   (counter := (!counter) + 9 + (String.length str))); (!currCounter)
         | Some (x) -> (car (cdr x)) in
 
       (secondPass asts) in
-    (* ------> end of second pass: *)
-    let aux_thirdPass =
+    (* ------> end of second pass *)
+
+    (* ------> third pass: *)
+    let aux_thirdPass currConstTable =
       let rec thirdPass constTable =
         match constTable with
         | [] -> []
@@ -201,14 +213,14 @@ module Code_Gen : CODE_GEN = struct
                | (-1),_ -> (oldOffset1,offset2)
                | _,(-1) -> (offset1,oldOffset2)
                | _,_ -> (offset1,offset2) in
-             (Printf.sprintf "MAKE_LITERAL_PAIR(%d,%d)\n" newOffset1 newOffset2)
+             (Printf.sprintf "MAKE_LITERAL_PAIR(const_tbl+%d,const_tbl+%d)\n" newOffset1 newOffset2)
 
       and findTagRefs sexp =
         match sexp with
-        | Pair(TagRef(x),TagRef(y)) -> ((fixTagRef x),(fixTagRef y))
-        | Pair(TagRef(x),y) -> ((fixTagRef x),(-1))
-        | Pair(x,TagRef(y)) -> ((-1),(fixTagRef y))
-        |_ -> ((-1),(-1))
+        | Sexpr(Pair(TagRef(x),TagRef(y))) -> ((fixTagRef x),(fixTagRef y))
+        | Sexpr(Pair(TagRef(x),y)) -> ((fixTagRef x),(-1))
+        | Sexpr(Pair(x,TagRef(y))) -> ((-1),(fixTagRef y))
+        | _ -> ((-1),(-1))
 
       and fixTagRef str =
         let value = (findRef str (!taggedCollection)) in
@@ -219,20 +231,26 @@ module Code_Gen : CODE_GEN = struct
       and find exp list =
         match list with
         | [] -> None
-        | x::xs -> if(sexpr_eq (car x) exp) then Some (x) else (find exp xs)
+        | (Void,(off,str))::xs -> (find exp xs)
+        | x::xs -> let currExp = match (car x) with | Sexpr(x) -> x | _-> raise (X_code_gen_error "find expected only type sexpr") in
+                   if(sexpr_eq currExp exp) then Some (x) else (find exp xs)
 
       and findRef str list =
         match list with
         | [] -> raise (X_code_gen_error "TagRef without definition (findRef())")
         | (x,y)::cdr -> if (x = str) then y else (findRef str cdr) in
-      thirdPass (!constTbl) in
 
-    let newAsts = rename asts (ref []) in (*activate first pass*)
-    (aux_secondPass newAsts) ; aux_thirdPass;;
+      thirdPass (!currConstTable) in
+      (* ------> end of third pass *)
+
+
+    let newAsts = rename asts (ref []) in (*activate first pass - rename all tagged exps*)
+    (aux_secondPass newAsts) ; (aux_thirdPass constTbl);;
 
   let make_consts_tbl asts =
-    aux_make_consts_tbl asts (ref []) (ref []) (ref 6);;
-
+    let newTable = [((Sexpr(Nil)),(0,"MAKE_NIL\n"));(Void,(1,"MAKE_VOID\n"));((Sexpr(Bool(true))),(2,"MAKE_BOOL(1)\n"));((Sexpr(Bool(false))),(4,"MAKE_BOOL(0)\n"))] in
+    aux_make_consts_tbl asts (ref []) (ref newTable) (ref 6);;
+                (*definitions collection , const_table , counter*)
 
   let make_fvars_tbl asts = raise X_not_yet_implemented;;
   let generate consts fvars e = raise X_not_yet_implemented;;
