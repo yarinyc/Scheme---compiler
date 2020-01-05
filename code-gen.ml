@@ -252,7 +252,31 @@ module Code_Gen : CODE_GEN = struct
     aux_make_consts_tbl asts (ref []) (ref newTable) (ref 6);;
                 (*definitions collection , const_table , counter*)
 
-  let make_fvars_tbl asts = raise X_not_yet_implemented;;
+  let aux_make_fvars_tbl asts counter =
+    let rec run asts counter =
+      match asts with
+      | [] -> []
+      | car::cdr -> (make_freeVars counter car)@(run cdr counter)
+
+    and make_freeVars counter ast =
+      match ast with
+      | Const'(x) -> []
+      | Var'(x) -> []
+      | Box'(x) -> []
+      | BoxSet'(var,exp) -> []
+      | BoxGet'(x) -> []
+      | If'(test,dit,dif) -> []
+      | Seq'(exps) -> []
+      (* | Seq'(exps) -> List.fold_left (fun acc e -> acc@e) [] (List.map (make_freeVars counter) exps) *)
+      | Set'(x, exp) -> []
+      | Def'(Var'(VarFree(name)), exp) -> (counter:= (!counter) + 1) ;[(name,((!counter)-1))]
+      | Or'(exps) -> []
+      | LambdaSimple'(params,body) -> []
+      | LambdaOpt'(params,opt,body) -> []
+      | Applic'(op, args) -> []
+      | ApplicTP'(op, args) -> [] in
+    (run asts counter)
+
   let generate consts fvars e = raise X_not_yet_implemented;;
 end;;
 
