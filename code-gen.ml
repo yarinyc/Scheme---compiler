@@ -33,7 +33,8 @@ module type CODE_GEN = sig
    *)
   val generate : (constant * (int * string)) list -> (string * int) list -> expr' -> string
 
-  (* let make_consts_tbl exprList = *)
+  val rename : expr' list -> (string * int ref * bool ref) list ref -> expr' list
+
 
 end;;
 
@@ -48,36 +49,38 @@ module Code_Gen : CODE_GEN = struct
       match exprList with
       | [] -> []
       | car::cdr -> let res = (renameAST car) in
-                    res::(run cdr)
-
-    and renameTagRef name =
-      let optCounter = List.find_opt (fun x -> match x with |(currName,_)-> (if(currName=name) then true else false)) !counterList in
-      let counter = match optCounter with | Some((x,y)) -> y | _-> raise (X_code_gen_error "TagRef without definition") in
-      let newName = String.concat "" [name; (string_of_int !counter)] in
-      newName
+                    (counterList:= List.map (fun ((x,y,z)) -> (x,y,(ref false))) !counterList;
+                    res::(run cdr))
 
     and renameTagExp name =
-      let optCounter = List.find_opt (fun x -> match x with |(currName,_)-> (if(currName=name) then true else false)) !counterList in
-      let counter = match optCounter with | Some((x,y)) -> y | _-> (ref 0) in
+      let optCounter = List.find_opt (fun x -> match x with |(currName,_,_)-> (if(currName=name) then true else false)) !counterList in
+      let counter = match optCounter with | Some((x,y,z)) -> y | _-> (ref 0) in
+      let boolean = match optCounter with | Some((x,y,z)) -> z | _-> (ref true) in
       if((!counter)=0)
-      then ((counterList:= (name, (ref 1))::(!counterList));
+      then ((counterList:= (name, (ref 1), (ref true))::(!counterList));
             let newName = String.concat "" [name; "1"] in
             newName)
-      else ((counter:= !counter+1);
-            let newName = String.concat "" [name;(string_of_int !counter)] in
-            newName)
+      else if (!boolean)
+           then let newName = String.concat "" [name;(string_of_int !counter)] in
+                    newName
+           else ((counter:= !counter+1);
+                 (boolean:= true);
+                 let newName = String.concat "" [name;(string_of_int !counter)] in
+                 newName)
+
 
     and renameSexpr sexpr =
       match sexpr with
-      | Pair(x,y) -> Pair((renameSexpr x), (renameSexpr y))
-      | TagRef(x) -> TagRef(renameTagRef x)
+      | Pair(x,y) -> let renameX = (renameSexpr x) in
+                     Pair(renameX, (renameSexpr y))
+      | TagRef(x) -> TagRef(renameTagExp x)
       | TaggedSexpr(name, sexp) -> let newName = renameTagExp name in
                             TaggedSexpr(newName,(renameSexpr sexp))
       | _ -> sexpr
 
     and renameAST expr =
       match expr with
-      | Const'(Sexpr(TagRef(x))) -> Const'(Sexpr(TagRef(renameTagRef x)))
+      | Const'(Sexpr(TagRef(x))) -> Const'(Sexpr(TagRef(renameTagExp x)))
       | Const'(Sexpr(TaggedSexpr(name,sexpr))) -> let newName = renameTagExp name in
                             Const'(Sexpr(TaggedSexpr(newName,(renameSexpr sexpr))))
       | Const'(Sexpr(x)) -> Const'(Sexpr(renameSexpr x))
@@ -148,9 +151,9 @@ module Code_Gen : CODE_GEN = struct
         | Number(Float(x)) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_FLOAT(%f)\n" x)))]; (counter := (!counter) + 9))
         | Bool(x) -> ()
         | Nil -> ()
-        | Char(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_CHAR(%c)\n" x)))]; (counter := (!counter) + 2))
-        | String(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_STRING(\"%s\")\n" x)))]; (counter := (!counter) + 9 + (String.length x)))
-        | Symbol(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_SYMBOL(const_tbl+%d)\n" (findPtr x constTbl))))]; (counter := (!counter) + 9))
+        | Char(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_CHAR('%c')\n" x)))]; (counter := (!counter) + 2))
+        | String(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_STRING \"%s\"\n" x)))]; (counter := (!counter) + 9 + (String.length x)))
+        | Symbol(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_SYMBOL(const_tbl+%d)\n" (findPtr x constTbl))))]; (counter := (!counter) + 9))
         | Pair(x,y) -> (addToConst x);
                       (addToConst y);
                       (if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_PAIR(const_tbl+%d,const_tbl+%d)\n" (getOffset x) (getOffset y))))]; (counter := (!counter) + 17)))
@@ -183,7 +186,7 @@ module Code_Gen : CODE_GEN = struct
         let currCounter = (ref 0) in
         let found = (find (String(str)) (!list)) in
         match found with
-        | None -> (constTbl:= !constTbl@[((Sexpr(String(str))), ((!counter), (Printf.sprintf "MAKE_LITERAL_STRING(\"%s\")\n" str)))];
+        | None -> (constTbl:= !constTbl@[((Sexpr(String(str))), ((!counter), (Printf.sprintf "MAKE_LITERAL_STRING \"%s\"\n" str)))];
                   currCounter := (!counter);
                   (counter := (!counter) + 9 + (String.length str))); (!currCounter)
         | Some (x) -> (car (cdr x)) in
@@ -248,7 +251,7 @@ module Code_Gen : CODE_GEN = struct
     (aux_secondPass newAsts) ; (aux_thirdPass constTbl);;
 
   let make_consts_tbl asts =
-    let newTable = [((Sexpr(Nil)),(0,"MAKE_NIL\n"));(Void,(1,"MAKE_VOID\n"));((Sexpr(Bool(true))),(2,"MAKE_BOOL(1)\n"));((Sexpr(Bool(false))),(4,"MAKE_BOOL(0)\n"))] in
+    let newTable = [(Void,(0,"MAKE_VOID\n"));((Sexpr(Nil)),(1,"MAKE_NIL\n"));((Sexpr(Bool(true))),(2,"MAKE_BOOL(1)\n"));((Sexpr(Bool(false))),(4,"MAKE_BOOL(0)\n"))] in
     aux_make_consts_tbl asts (ref []) (ref newTable) (ref 6);;
                 (*definitions collection , const_table , counter*)
 
@@ -260,23 +263,142 @@ module Code_Gen : CODE_GEN = struct
 
     and make_freeVars counter ast =
       match ast with
-      | Const'(x) -> []
-      | Var'(x) -> []
-      | Box'(x) -> []
-      | BoxSet'(var,exp) -> []
-      | BoxGet'(x) -> []
-      | If'(test,dit,dif) -> []
-      | Seq'(exps) -> []
       (* | Seq'(exps) -> List.fold_left (fun acc e -> acc@e) [] (List.map (make_freeVars counter) exps) *)
-      | Set'(x, exp) -> []
       | Def'(Var'(VarFree(name)), exp) -> (counter:= (!counter) + 1) ;[(name,((!counter)-1))]
-      | Or'(exps) -> []
-      | LambdaSimple'(params,body) -> []
-      | LambdaOpt'(params,opt,body) -> []
-      | Applic'(op, args) -> []
-      | ApplicTP'(op, args) -> [] in
-    (run asts counter)
+      | _ -> [] in
+    (run asts counter);;
 
-  let generate consts fvars e = raise X_not_yet_implemented;;
+    let aux_primitive_names_to_labels =
+      ["boolean?", "is_boolean"; "float?", "is_float"; "integer?", "is_integer"; "pair?", "is_pair";
+      "null?", "is_null"; "char?", "is_char"; "string?", "is_string";
+      "procedure?", "is_procedure"; "symbol?", "is_symbol"; "string-length", "string_length";
+      "string-ref", "string_ref"; "string-set!", "string_set"; "make-string", "make_string";
+      "symbol->string", "symbol_to_string";
+      "char->integer", "char_to_integer"; "integer->char", "integer_to_char"; "eq?", "is_eq";
+      "+", "bin_add"; "*", "bin_mul"; "-", "bin_sub"; "/", "bin_div"; "<", "bin_lt"; "=", "bin_equ"
+    (* you can add yours here *)];;
+
+  let make_fvars_tbl asts =
+    let counter = (ref 0) in
+    let primFreeVars = List.map (fun ((a,b)) -> ((counter:= !counter +1);(a,(!counter - 1))) ) aux_primitive_names_to_labels in
+    primFreeVars@(aux_make_fvars_tbl asts counter);;
+
+  let rec findAddress exp constable =
+    match constable with
+    | [] -> raise (X_code_gen_error "shouldn't happen (findAddress())")
+    | (Void,(off,str))::xs -> if(exp = Void) then off  else (findAddress exp xs)
+    | ((Sexpr(e)),(off,str))::xs -> let sexpr = match exp with | Sexpr(x) -> x | _-> raise (X_code_gen_error "shouldn't happen (findAdress())") in
+                                  if(sexpr_eq e sexpr) then off else (findAddress exp xs);;
+
+  let rec findFreeAddress name freeVar =
+    match freeVar with
+    | [] -> raise (X_code_gen_error "shouldn't happen (findFreeAddress())")
+    | (x,index)::cdr -> if (x = name) then index else (findFreeAddress name cdr);;
+
+  let rec findTagDefinition name collection =
+    match collection with
+    | [] -> raise (X_code_gen_error "shouldn't happen (findTagDefinition())")
+    | (str,sexpr)::xs -> if (str = name) then Sexpr(sexpr) else (findTagDefinition name xs)
+
+  let splitLast lst =
+    let last = List.nth lst ((List.length lst)-1) in
+    let rec cut l =
+      match l with
+      | [a] -> []
+      | a::b -> [a]@ (cut b)
+      | _ -> [] in
+    ((cut lst),last);;
+
+  let getCollection e taggedCollection =
+    let collectTags name sexp =
+        taggedCollection:= (name, sexp)::(!taggedCollection) in
+    let rec collect sexp =
+      match sexp with
+      | Pair(x,y) -> (collect x);
+                    (collect y)
+      | TaggedSexpr(name,sexp) -> (collectTags name sexp)
+      | _  -> ()
+    and traverseAst ast =
+        match ast with
+      | Const'(Sexpr(TagRef(x))) -> ()
+      | Const'(Sexpr(TaggedSexpr(name,sexp))) -> (collectTags name sexp);(collect sexp)
+      | Const'(Sexpr(x)) -> (collect x)
+      | Const'(Void) -> ()
+      | Var'(x) -> ()
+      | Box'(x) -> ()
+      | BoxSet'(var,exp) -> (traverseAst exp)
+      | BoxGet'(x) -> ()
+      | If'(test,dit,dif) -> ((traverseAst test);(traverseAst dit);(traverseAst dif))
+      | Seq'(exps) -> (aux_mapThenUnit exps )
+      | Set'(x, exp) -> (traverseAst exp)
+      | Def'(x, exp) -> (traverseAst exp)
+      | Or'(exps) -> (aux_mapThenUnit exps)
+      | LambdaSimple'(params,body) -> (traverseAst body)
+      | LambdaOpt'(params,opt,body) -> (traverseAst body)
+      | Applic'(op, args) ->  (traverseAst op) ;
+                            (aux_mapThenUnit args)
+      | ApplicTP'(op, args) -> (traverseAst op) ;
+                              (aux_mapThenUnit args)
+    and aux_mapThenUnit lst =
+      let list = List.map traverseAst lst in
+      let unit =() in
+      let unitPair = (unit,list) in
+      (car unitPair) in
+    (traverseAst e); taggedCollection;;
+
+  let counter_Lexit = ref 1;;
+
+  let generate consts fvars e =
+    let getLabel label_name label_counter =
+      let counter = (!label_counter) in
+      let newLabel = (label_name ^ (string_of_int counter)) in
+      (label_counter := !label_counter + 1) ; newLabel in
+
+    let tagCollection = getCollection e (ref []) in
+
+    let rec aux_generate e =
+      match e with
+      | Const'(x) ->  let exp = (match x with
+                                | Sexpr(TaggedSexpr(name, sexpr)) -> Sexpr(sexpr)
+                                | Sexpr(TagRef(name)) -> (findTagDefinition name (!tagCollection))
+                                | _-> x) in
+                      let address = (findAddress exp consts) in
+                      (Printf.sprintf "\tmov rax, (const_tbl + %d)\n" address)
+      | Var'(VarParam(_, minor)) -> (Printf.sprintf "\tmov rax, qword [rbp + WORD_SIZE*(4 + %d)]\n" minor)
+      | Set'(Var'(VarParam(_, minor)),exp) -> String.concat "" [aux_generate(exp); (Printf.sprintf "\tmov qword [rbp + WORD_SIZE*(4+%d)], rax \n
+                                                                           \tmov rax, SOB_VOID_ADDRESS \n" minor)]
+      | Var'(VarBound(_, major, minor)) -> (Printf.sprintf "\tmov rax, qword [rbp + WORD_SIZE*2] \n
+                                                             \tmov rax, qword [rax + WORD_SIZE*%d] \n
+                                                             \tmov rax, qword [rax + WORD_SIZE*%d]\n" major minor)
+      | Set'(Var'(VarBound(_,major,minor)),exp) -> String.concat "" [aux_generate(exp); (Printf.sprintf "\tmov rbx, qword [rbp + WORD_SIZE*2] \n
+                                                                                   \tmov rbx, qword [rax + WORD_SIZE*%d] \n
+                                                                                   \tmov qword [rbx + WORD_SIZE*%d], rax \n
+                                                                                   \tmov rax, SOB_VOID_ADDRESS\n" major minor)]
+      | Var'(VarFree(v)) -> let address = findFreeAddress v fvars in
+                            (Printf.sprintf "\tmov rax, qword [fvar_tbl + WORD_SIZE*%d]\n" address)
+      | Set'(Var'(VarFree(v)),exp) -> String.concat ""  [aux_generate(exp);
+                            let address = findFreeAddress v fvars in
+                            (Printf.sprintf "\tmov qword [fvar_tbl + WORD_SIZE*%d], rax\n
+                                             \tmov rax, SOB_VOID_ADDRESS\n" address)]
+      | Seq'(exps) -> String.concat " " (List.map aux_generate exps)
+      | Or'(exps) -> let (list,last) = (splitLast exps) in
+                     let labelExit = (getLabel "Lexit" counter_Lexit) in
+                    (String.concat ""  ((List.map (fun(x) -> String.concat "" [(aux_generate x);
+                             "\tcmp rax, SOB_FALSE_ADDRESS \n"; "\tjne " ^ labelExit ^ "\n"]) list) @ [aux_generate(last); "\t" ^ labelExit ^ ":\n"]))
+      | If'(test,dit,dif) -> let labelExit = (getLabel "Lexit" counter_Lexit) in
+                             let labelElse = (getLabel "Lelse" counter_Lexit) in
+                              ((aux_generate test) ^ "\tcmp rax, SOB_FALSE_ADDRESS \n\tje " ^ labelElse ^ "\n" ^
+                              (aux_generate dit) ^ "\tjmp " ^ labelExit ^"\n\t" ^ labelElse ^ ":\n" ^
+                              (aux_generate dif) ^ "\t" ^ labelExit ^ ":\n")
+      | BoxGet'(v) -> (aux_generate (Var'(v))) ^ "\tmov rax, qword [rax]\n"
+      | BoxSet'(v,exp) -> (aux_generate exp) ^ "\tpush rax\n" ^ (aux_generate (Var'(v))) ^ "\tpop qword [rax]\n\tmov rax, SOB_VOID_ADDRESS\n"
+      | Def'(Var'(VarFree(v)),exp) -> let address = findFreeAddress v fvars in
+                                      let value = aux_generate exp in
+                                      value ^ (Printf.sprintf "\tmov qword [fvar_tbl + WORD_SIZE*%d], rax\n" address)
+                                      ^ "\tmov rax, SOB_VOID_ADDRESS\n"
+      | _ -> raise X_not_yet_implemented in
+    aux_generate e;;
+
+
 end;;
 

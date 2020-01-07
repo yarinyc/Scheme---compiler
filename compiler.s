@@ -18,18 +18,18 @@
 %define CHAR_SPACE 32
 %define CHAR_DOUBLEQUOTE 34
 %define CHAR_BACKSLASH 92
-
+	
 %define TYPE_SIZE 1
 %define WORD_SIZE 8
-
+	
 %define KB(n) n*1024
 %define MB(n) 1024*KB(n)
 %define GB(n) 1024*MB(n)
 
 
 %macro SKIP_TYPE_TAG 2
-	mov %1, qword [%2+TYPE_SIZE]
-%endmacro
+	mov %1, qword [%2+TYPE_SIZE]	
+%endmacro	
 
 %define INT_VAL SKIP_TYPE_TAG
 
@@ -58,7 +58,7 @@
 %define CLOSURE_CODE CDR
 
 %define PVAR(n) qword [rbp+(4+n)*WORD_SIZE]
-
+	
 %define SOB_UNDEFINED T_UNDEFINED
 %define SOB_NIL T_NIL
 %define SOB_VOID T_VOID
@@ -74,40 +74,7 @@
 	sub %1, [rsp]
 	add rsp, 8
 %endmacro
-
-;*** macros from RS9: ***
-%macro MAKE_LITERAL 2
-			; Make a literal of type %1
-	db %1	; followed by the definition %2
-	%2
-%endmacro
-
-%define MAKE_LITERAL_INT(val) MAKE_LITERAL T_INTEGER, dq val
-%define MAKE_LITERAL_FLOAT(val) MAKE_LITERAL T_INTEGER, dq val
-%define MAKE_LITERAL_CHAR(val) MAKE_LITERAL T_CHAR, db val
-%define MAKE_NIL db T_NIL
-%define MAKE_VOID db T_VOID
-%define MAKE_BOOL(val) MAKE_LITERAL T_BOOL, db val
-%define MAKE_SYMBOL(val) MAKE_LITERAL T_SYMBOL dq val
-%macro MAKE_LITERAL_STRING 1
-	db T_STRING
-	dq (%%end_str- %%str)
-	%%str:
-		db %1
-	%%end_str:
-%endmacro
-;;; Creates a literal SOB with tag %1
-;;; from two pointers %2 and %3
-%macro MAKE_WORDS_LIT 3
-	db %1
-	dq %2
-	dq %3
-%endmacro
-%define MAKE_LITERAL_PAIR(car, cdr)
-	MAKE_WORDS_LIT T_PAIR, car, cdr
-
-;*** end of macros from RS9 ***
-
+	
 ; Creates a short SOB with the
 ; value %2
 ; Returns the result in register %1
@@ -156,10 +123,10 @@
 ;;; from two pointers %3 and %4
 ;;; Stores result in register %1
 %macro MAKE_TWO_WORDS 4 
-        MALLOC %1, TYPE_SIZE+WORD_BYTES*2
+        MALLOC %1, TYPE_SIZE+WORD_SIZE*2
         mov byte [%1], %2
         mov qword [%1+TYPE_SIZE], %3
-        mov qword [%1+TYPE_SIZE+WORD_BYTES], %4
+        mov qword [%1+TYPE_SIZE+WORD_SIZE], %4
 %endmacro
 
 %macro MAKE_WORDS_LIT 3
@@ -176,6 +143,33 @@
 
 %define MAKE_CLOSURE(r, env, body) \
         MAKE_TWO_WORDS r, T_CLOSURE, env, body
+
+
+;********************** macros from RS9: **********************
+%macro MAKE_LITERAL 2
+			; Make a literal of type %1
+	db %1	; followed by the definition %2
+	%2
+%endmacro
+
+%define MAKE_LITERAL_INT(val) MAKE_LITERAL T_INTEGER, dq val
+%define MAKE_LITERAL_FLOAT(val) MAKE_LITERAL T_FLOAT, dq val
+%define MAKE_LITERAL_CHAR(val) MAKE_LITERAL T_CHAR, db val
+%define MAKE_NIL db T_NIL
+%define MAKE_VOID db T_VOID
+%define MAKE_BOOL(val) MAKE_LITERAL T_BOOL, db val
+%define MAKE_SYMBOL(val) MAKE_LITERAL T_SYMBOL, dq val
+%macro MAKE_LITERAL_STRING 1
+	db T_STRING
+	dq (%%end_str- %%str)
+	%%str:
+		db %1
+	%%end_str:
+%endmacro
+
+%define MAKE_LITERAL_PAIR(car, cdr) MAKE_WORDS_LIT T_PAIR, car, cdr
+
+;********************** end of macros from RS9 **********************
 
 	
 extern printf, malloc

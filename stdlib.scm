@@ -13,18 +13,18 @@
 
 (define fold-left
   #;(Add your implementation here
-     Note: The file won't compile like this, beacuase your tag-parser requires define to have a second expression.
-     This is on purpose, so you don't compile the library without completing this implementation by mistake.))
+     Note: The file won't compile like this, beacuase your tag-parser requires define to have a second expression
+     This is on purpose, so you don't compile the library without completing this implementation by mistake))
 
 (define fold-right
   #;(Add your implementation here
-     Note: The file won't compile like this, beacuase your tag-parser requires define to have a second expression.
-     This is on purpose, so you don't compile the library without completing this implementation by mistake.))
+     Note: The file won't compile like this, beacuase your tag-parser requires define to have a second expression
+     This is on purpose, so you don't compile the library without completing this implementation by mistake))
 
 (define cons*
   #;(Add your implementation here
-     Note: The file won't compile like this, beacuase your tag-parser requires define to have a second expression.
-     This is on purpose, so you don't compile the library without completing this implementation by mistake.))
+     Note: The file won't compile like this, beacuase your tag-parser requires define to have a second expression
+     This is on purpose, so you don't compile the library without completing this implementation by mistake))
 
 (define append
   (let ((null? null?)
@@ -97,7 +97,7 @@
 	(null? null?))
     (lambda (x . y)
       (if (null? y)
-	  (/ 0 x)
+	  (/ 1 x)
 	  (/ x (apply * y))))))
 
 (define =

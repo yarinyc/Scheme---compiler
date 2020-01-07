@@ -10,20 +10,22 @@ let string_to_asts s = List.map Semantics.run_semantics
                          (Tag_Parser.tag_parse_expressions
                             (Reader.read_sexprs s));;
 
-let primitive_names_to_labels = 
+let primitive_names_to_labels =
   ["boolean?", "is_boolean"; "float?", "is_float"; "integer?", "is_integer"; "pair?", "is_pair";
    "null?", "is_null"; "char?", "is_char"; "string?", "is_string";
    "procedure?", "is_procedure"; "symbol?", "is_symbol"; "string-length", "string_length";
    "string-ref", "string_ref"; "string-set!", "string_set"; "make-string", "make_string";
-   "symbol->string", "symbol_to_string"; 
+   "symbol->string", "symbol_to_string";
    "char->integer", "char_to_integer"; "integer->char", "integer_to_char"; "eq?", "is_eq";
    "+", "bin_add"; "*", "bin_mul"; "-", "bin_sub"; "/", "bin_div"; "<", "bin_lt"; "=", "bin_equ"
 (* you can add yours here *)];;
 
 let make_prologue consts_tbl fvars_tbl =
   let make_primitive_closure (prim, label) =
+    (* Adapt the addressing here to your fvar addressing scheme:
+       This imlementation assumes fvars are offset from the base label fvar_tbl *)
 "    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, " ^ label  ^ ")
-    mov [" ^  (string_of_int (List.assoc prim fvars_tbl)) ^ "], rax" in
+    mov [fvar_tbl+ WORD_SIZE*" ^  (string_of_int (List.assoc prim fvars_tbl)) ^ "], rax" in
   let constant_bytes (c, (a, s)) = s in
 "
 ;;; All the macros and the scheme-object printing procedure
@@ -41,10 +43,10 @@ const_tbl:
 
 ;;; These macro definitions are required for the primitive
 ;;; definitions in the epilogue to work properly
-%define SOB_VOID_ADDRESS " ^ (string_of_int (fst (List.assoc Void consts_tbl))) ^ "
-%define SOB_NIL_ADDRESS " ^ (string_of_int (fst (List.assoc (Sexpr Nil) consts_tbl))) ^ "
-%define SOB_FALSE_ADDRESS " ^ (string_of_int (fst (List.assoc (Sexpr (Bool true)) consts_tbl))) ^ "
-%define SOB_TRUE_ADDRESS " ^ (string_of_int  (fst (List.assoc (Sexpr (Bool false)) consts_tbl))) ^ "
+%define SOB_VOID_ADDRESS const_tbl+" ^ (string_of_int (fst (List.assoc Void consts_tbl))) ^ "
+%define SOB_NIL_ADDRESS const_tbl+" ^ (string_of_int (fst (List.assoc (Sexpr Nil) consts_tbl))) ^ "
+%define SOB_FALSE_ADDRESS const_tbl+" ^ (string_of_int (fst (List.assoc (Sexpr (Bool false)) consts_tbl))) ^ "
+%define SOB_TRUE_ADDRESS const_tbl+" ^ (string_of_int  (fst (List.assoc (Sexpr (Bool true)) consts_tbl))) ^ "
 
 fvar_tbl:
 " ^
@@ -56,7 +58,6 @@ global main
 section .text
 main:
     push rbp
-    mov rbp,rsp
 
     ;; set up the heap
     mov rdi, GB(4)
@@ -72,6 +73,7 @@ main:
     push qword SOB_NIL_ADDRESS
     push qword T_UNDEFINED
     push rsp
+    mov rbp,rsp
 
     ;; Set up the primitive stdlib fvars:
     ;; Since the primtive procedures are defined in assembly,
@@ -98,22 +100,25 @@ exception X_missing_input_file;;
 
 try
   let infile = Sys.argv.(1) in
-  let code =  (file_to_string "stdlib.scm") ^ (file_to_string infile) in
+  (* let code =  (file_to_string "stdlib.scm") ^ (file_to_string infile) in *)
+  let code =file_to_string infile in
   let asts = string_to_asts code in
   let consts_tbl = Code_Gen.make_consts_tbl asts in
   let fvars_tbl = Code_Gen.make_fvars_tbl asts in
+  let renamedAsts = Code_Gen.rename asts (ref []) in
   let generate = Code_Gen.generate consts_tbl fvars_tbl in
   let code_fragment = String.concat "\n\n"
                         (List.map
                            (fun ast -> (generate ast) ^ "\n\tcall write_sob_if_not_void")
-                           asts) in
+                           renamedAsts) in
   (* clean_exit contains instructions to clean the dummy stack
      and return exit code 0 ("all's well") from procedure main. *)
   let clean_exit = "\n\n\tmov rax, 0\n\tadd rsp, 4*8\n\tpop rbp\n\tret\n\n" in
   let provided_primitives = file_to_string "prims.s" in
-                   
+
   print_string ((make_prologue consts_tbl fvars_tbl)  ^
                   code_fragment ^ clean_exit ^
                     provided_primitives ^ "\n" ^ epilogue)
 
 with Invalid_argument(x) -> raise X_missing_input_file;;
+
