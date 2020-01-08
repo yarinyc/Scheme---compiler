@@ -60,7 +60,7 @@ main:
     push rbp
 
     ;; set up the heap
-    mov rdi, GB(4)
+    mov rdi, GB(3)
     call malloc
     mov [malloc_pointer], rax
 

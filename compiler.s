@@ -168,14 +168,26 @@
 %endmacro
 
 %define MAKE_LITERAL_PAIR(car, cdr) MAKE_WORDS_LIT T_PAIR, car, cdr
+;*** getters: ***
+%define TYPE(r) byte [r]
+%define DATA(r) [r + TYPE_SIZE]
+
+%define LOWER_DATA(sob) qword [sob + TYPE_SIZE]
+%define UPPER_DATA(sob) qword [sob + WORD_SIZE + TYPE_SIZE]
+
+%define GET_CAR LOWER_DATA
+%define GET_CDR UPPER_DATA
+
+%define GET_ENV LOWER_DATA
+%define GET_BODY UPPER_DATA
 
 ;********************** end of macros from RS9 **********************
 
-	
+
 extern printf, malloc
 global write_sob, write_sob_if_not_void
 
-	
+
 write_sob_undefined:
 	push rbp
 	mov rbp, rsp

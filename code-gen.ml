@@ -347,16 +347,28 @@ module Code_Gen : CODE_GEN = struct
     (traverseAst e); taggedCollection;;
 
   let counter_Lexit = ref 1;;
+  let counter_Lelse = ref 1;;
+  let counter_LNoError = ref 1;;
+  let counter_Lfunc = ref 1;;
+
+  let getLabel label_name label_counter =
+    let counter = (!label_counter) in
+    let newLabel = (label_name ^ (string_of_int counter)) in
+    (label_counter := !label_counter + 1) ; newLabel;;
+
+  let rec extEnv n currDepth =
+    if(currDepth = 0)
+    then if (n=0) then "\tmov qword [rsi], 0\n" else (Printf.sprintf "\tMALLOC rcx, (WORD_SIZE*%d)\n" n) ^ "\tmov [rsi], rcx\n" ^ (createArgsVector n)
+    else (Printf.sprintf "\tmov rbx, qword [rdi + WORD_SIZE*%d]\n\tmov qword [rsi + WORD_SIZE*%d], rbx\n" currDepth (currDepth+1)) ^ (extEnv n (currDepth - 1))
+  and createArgsVector n =
+    if (n = 0)
+    then ""
+    else (Printf.sprintf "\tmov rbx, PVAR(%d)\n" n) ^ (Printf.sprintf "\tmov qword [rcx + WORD_SIZE*%d], rbx\n" n) ^ (createArgsVector (n-1));;
 
   let generate consts fvars e =
-    let getLabel label_name label_counter =
-      let counter = (!label_counter) in
-      let newLabel = (label_name ^ (string_of_int counter)) in
-      (label_counter := !label_counter + 1) ; newLabel in
-
     let tagCollection = getCollection e (ref []) in
 
-    let rec aux_generate e =
+    let rec aux_generate depth e =
       match e with
       | Const'(x) ->  let exp = (match x with
                                 | Sexpr(TaggedSexpr(name, sexpr)) -> Sexpr(sexpr)
@@ -365,39 +377,70 @@ module Code_Gen : CODE_GEN = struct
                       let address = (findAddress exp consts) in
                       (Printf.sprintf "\tmov rax, (const_tbl + %d)\n" address)
       | Var'(VarParam(_, minor)) -> (Printf.sprintf "\tmov rax, qword [rbp + WORD_SIZE*(4 + %d)]\n" minor)
-      | Set'(Var'(VarParam(_, minor)),exp) -> String.concat "" [aux_generate(exp); (Printf.sprintf "\tmov qword [rbp + WORD_SIZE*(4+%d)], rax \n
+      | Set'(Var'(VarParam(_, minor)),exp) -> String.concat "" [(aux_generate depth exp); (Printf.sprintf "\tmov qword [rbp + WORD_SIZE*(4+%d)], rax \n
                                                                            \tmov rax, SOB_VOID_ADDRESS \n" minor)]
       | Var'(VarBound(_, major, minor)) -> (Printf.sprintf "\tmov rax, qword [rbp + WORD_SIZE*2] \n
                                                              \tmov rax, qword [rax + WORD_SIZE*%d] \n
                                                              \tmov rax, qword [rax + WORD_SIZE*%d]\n" major minor)
-      | Set'(Var'(VarBound(_,major,minor)),exp) -> String.concat "" [aux_generate(exp); (Printf.sprintf "\tmov rbx, qword [rbp + WORD_SIZE*2] \n
+      | Set'(Var'(VarBound(_,major,minor)),exp) -> String.concat "" [(aux_generate depth exp); (Printf.sprintf "\tmov rbx, qword [rbp + WORD_SIZE*2] \n
                                                                                    \tmov rbx, qword [rax + WORD_SIZE*%d] \n
                                                                                    \tmov qword [rbx + WORD_SIZE*%d], rax \n
                                                                                    \tmov rax, SOB_VOID_ADDRESS\n" major minor)]
       | Var'(VarFree(v)) -> let address = findFreeAddress v fvars in
                             (Printf.sprintf "\tmov rax, qword [fvar_tbl + WORD_SIZE*%d]\n" address)
-      | Set'(Var'(VarFree(v)),exp) -> String.concat ""  [aux_generate(exp);
-                            let address = findFreeAddress v fvars in
+      | Set'(Var'(VarFree(v)),exp) ->
+                            let address = (findFreeAddress v fvars) in
+                            (aux_generate depth exp) ^
                             (Printf.sprintf "\tmov qword [fvar_tbl + WORD_SIZE*%d], rax\n
-                                             \tmov rax, SOB_VOID_ADDRESS\n" address)]
-      | Seq'(exps) -> String.concat " " (List.map aux_generate exps)
+                                             \tmov rax, SOB_VOID_ADDRESS\n" address)
+      | Seq'(exps) -> String.concat " " (List.map (aux_generate depth)  exps)
       | Or'(exps) -> let (list,last) = (splitLast exps) in
-                     let labelExit = (getLabel "Lexit" counter_Lexit) in
-                    (String.concat ""  ((List.map (fun(x) -> String.concat "" [(aux_generate x);
-                             "\tcmp rax, SOB_FALSE_ADDRESS \n"; "\tjne " ^ labelExit ^ "\n"]) list) @ [aux_generate(last); "\t" ^ labelExit ^ ":\n"]))
-      | If'(test,dit,dif) -> let labelExit = (getLabel "Lexit" counter_Lexit) in
-                             let labelElse = (getLabel "Lelse" counter_Lexit) in
-                              ((aux_generate test) ^ "\tcmp rax, SOB_FALSE_ADDRESS \n\tje " ^ labelElse ^ "\n" ^
-                              (aux_generate dit) ^ "\tjmp " ^ labelExit ^"\n\t" ^ labelElse ^ ":\n" ^
-                              (aux_generate dif) ^ "\t" ^ labelExit ^ ":\n")
-      | BoxGet'(v) -> (aux_generate (Var'(v))) ^ "\tmov rax, qword [rax]\n"
-      | BoxSet'(v,exp) -> (aux_generate exp) ^ "\tpush rax\n" ^ (aux_generate (Var'(v))) ^ "\tpop qword [rax]\n\tmov rax, SOB_VOID_ADDRESS\n"
+                     let labelExit = (getLabel ".Lexit" counter_Lexit) in
+                    (String.concat ""  ((List.map (fun(x) -> String.concat "" [(aux_generate depth x);
+                             "\tcmp rax, SOB_FALSE_ADDRESS \n"; "\tjne " ^ labelExit ^ "\n"]) list) @ [(aux_generate depth last); "\t" ^ labelExit ^ ":\n"]))
+      | If'(test,dit,dif) -> let labelExit = (getLabel ".Lexit" counter_Lexit) in
+                             let labelElse = (getLabel ".Lelse" counter_Lelse) in
+                              ((aux_generate depth test) ^ "\tcmp rax, SOB_FALSE_ADDRESS \n\tje " ^ labelElse ^ "\n" ^
+                              (aux_generate depth dit) ^ "\tjmp " ^ labelExit ^"\n\t" ^ labelElse ^ ":\n" ^
+                              (aux_generate depth dif) ^ "\t" ^ labelExit ^ ":\n")
+      | BoxGet'(v) -> (aux_generate depth (Var'(v))) ^ "\tmov rax, qword [rax]\n"
+      | BoxSet'(v,exp) -> (aux_generate depth exp) ^ "\tpush rax\n" ^ (aux_generate depth (Var'(v)))
+                          ^ "\tpop qword [rax]\n" ^ "\tmov rax, SOB_VOID_ADDRESS\n"
       | Def'(Var'(VarFree(v)),exp) -> let address = findFreeAddress v fvars in
-                                      let value = aux_generate exp in
+                                      let value = aux_generate depth exp in
                                       value ^ (Printf.sprintf "\tmov qword [fvar_tbl + WORD_SIZE*%d], rax\n" address)
                                       ^ "\tmov rax, SOB_VOID_ADDRESS\n"
+      | Applic'(op, args) ->
+            let pushedArgs = String.concat "\n" (List.map (fun e -> (aux_generate depth e) ^ "\tpush rax") (List.rev args)) in
+            let n = (Printf.sprintf "\tpush %d\n" (List.length args)) in
+            let operator = aux_generate depth op in
+            let labelNoError = getLabel ".LNoError" counter_LNoError in
+            let callClosure = "\tcmp TYPE(rax), T_CLOSURE\n"
+                              ^ "\tje " ^ labelNoError ^ "\n"
+                              ^ "\tmov rax, 1\n\tmov rbx, 1\n\tint 0x80 ;exit program when trying to apply a non closure\n"
+                              ^ "\t" ^ labelNoError ^ ":\n"
+                              ^ "\tpush GET_ENV(rax)\n"
+                              ^ "\tcall GET_BODY(rax)\n"
+                              ^ "\tadd rsp, 8*1 ; pop env\n"
+                              ^ "\tpop rbx ; pop arg count\n"
+                              ^ "\tshl rbx, 3 ; rbx = rbx * 8\n"
+                              ^ "\tadd rsp, rbx ; pop args\n" in
+            (pushedArgs ^ "\n" ^ n ^ operator ^ callClosure)
+      | LambdaSimple'(params,body) ->
+            let createBody = aux_generate (depth+1) body in
+            let labelFunc = getLabel ".Lfunc" counter_Lfunc in
+            let createEnv = (Printf.sprintf "\tMALLOC rsi, (WORD_SIZE*(1 + %d))\n" depth) (*rsi holds ExtEnv ptr*)
+                ^"\tmov rdi, qword [rbp + WORD_SIZE*2]\n" ^ (extEnv (List.length params) depth) in (*rdi holds current env ptr*)
+            "\t" ^ labelFunc ^ ":\n"
+            ^ createEnv
+            ^ "\tMAKE_CLOSURE(rax, rsi, .Lcode)\n"
+            ^ "\tjmp .Lcont\n"
+            ^ "\t.Lcode:\n"
+            ^ "\tpush rbp\n\tmov rbp, rsp\n"
+            ^ createBody
+            ^ "\tleave\n" ^ "\tret\n" ^ "\t.Lcont:\n"
       | _ -> raise X_not_yet_implemented in
-    aux_generate e;;
+    (aux_generate 0 e);;
 
 
 end;;

@@ -335,8 +335,8 @@ let rec map_with_counter f envIndex param counter lst =
 let box_set e = (box_setter e);;
 
 let run_semantics expr =
-  box_set
-    (annotate_tail_calls
-       (annotate_lexical_addresses expr));;
+  (* box_set *)
+    (* (annotate_tail_calls *)
+       (annotate_lexical_addresses expr);;
 
 end;; (* struct Semantics *)
