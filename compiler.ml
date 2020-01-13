@@ -18,6 +18,7 @@ let primitive_names_to_labels =
    "symbol->string", "symbol_to_string";
    "char->integer", "char_to_integer"; "integer->char", "integer_to_char"; "eq?", "is_eq";
    "+", "bin_add"; "*", "bin_mul"; "-", "bin_sub"; "/", "bin_div"; "<", "bin_lt"; "=", "bin_equ"
+   ; "car", "car_prim" ; "cdr", "cdr_prim" ; "cons", "cons_prim"
 (* you can add yours here *)];;
 
 let make_prologue consts_tbl fvars_tbl =
@@ -36,6 +37,9 @@ section .bss
 ;;; This pointer is used to manage allocations on our heap.
 malloc_pointer:
     resq 1
+temp_ptr:
+  resq 1
+
 
 section .data
 const_tbl:
@@ -60,7 +64,7 @@ main:
     push rbp
 
     ;; set up the heap
-    mov rdi, GB(3)
+    mov rdi, GB(1)
     call malloc
     mov [malloc_pointer], rax
 

@@ -1,3 +1,35 @@
+car_prim:
+    push rbp
+    mov rbp, rsp
+    mov rbx, PVAR(0)
+    mov rax, GET_CAR(rbx)
+
+.return:
+    leave
+    ret
+
+cdr_prim:
+    push rbp
+    mov rbp, rsp
+    mov rbx, PVAR(0)
+    mov rax, GET_CDR(rbx)
+
+.return:
+    leave
+    ret
+
+cons_prim:
+    push rbp
+    mov rbp, rsp
+    mov rbx, PVAR(0)
+    mov rcx, PVAR(1)
+    MAKE_PAIR(rax, rbx, rcx)
+
+
+.return:
+    leave
+    ret
+
 is_boolean:
     push rbp
     mov rbp, rsp

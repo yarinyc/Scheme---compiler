@@ -184,7 +184,7 @@
 ;********************** end of macros from RS9 **********************
 
 
-extern printf, malloc
+extern printf, malloc, memmove
 global write_sob, write_sob_if_not_void
 
 
