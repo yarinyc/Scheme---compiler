@@ -12,19 +12,42 @@
       map-loop)))
 
 (define fold-left
-  #;(Add your implementation here
-     Note: The file won't compile like this, beacuase your tag-parser requires define to have a second expression
-     This is on purpose, so you don't compile the library without completing this implementation by mistake))
+	(let ((null? null?)
+	  (car car) (cdr cdr)
+	  (apply apply) (map map))
+		(letrec ((fold-loop (lambda (f acc l . ls)
+				(if(null? l)
+				acc
+				(if(null? ls)
+					(fold-loop f (f acc (car l)) (cdr l) )
+					(apply fold-loop f (apply f acc (car l) (map car ls))
+									   (cdr l)
+									   (map cdr ls) ) )))))
+		fold-loop)))
+
+(define auxAppend
+	(lambda (l1 l2)
+		(if (null? (car l1))
+		 l2
+		 (cons (car l1) (auxAppend (cdr l1) l2)))))
 
 (define fold-right
-  #;(Add your implementation here
-     Note: The file won't compile like this, beacuase your tag-parser requires define to have a second expression
-     This is on purpose, so you don't compile the library without completing this implementation by mistake))
+	(let ((null? null?)
+	  (car car) (cdr cdr)
+	  (apply apply) (map map))
+		(letrec ((fold-loop (lambda (f acc l . ls)
+				(if(null? l)
+				acc
+				(if(null? ls)
+					(f (car l) (fold-loop f acc (cdr l)))
+					(apply f (car l)
+						(auxAppend	(map car ls)
+									(cons (apply fold-loop f acc (cdr l) (map cdr ls)) '() )) )
+					 )))))
+		fold-loop)))
 
-(define cons*
-  #;(Add your implementation here
-     Note: The file won't compile like this, beacuase your tag-parser requires define to have a second expression
-     This is on purpose, so you don't compile the library without completing this implementation by mistake))
+;(define cons* ())
+
 
 (define append
   (let ((null? null?)
@@ -114,8 +137,8 @@
   (let ((null? null?) (< <)
 	(car car) (cdr cdr))
     (letrec ((<-loop (lambda (element lst)
-		     (if (null? lst) 
-			 #t 
+		     (if (null? lst)
+			 #t
 			 (and (< element (car lst))
 			     (<-loop (car lst) (cdr lst)))))))
       (lambda (x . y)
@@ -134,7 +157,7 @@
       (lambda (x . y)
 	(>-loop x y)))))
 
-(define zero? 
+(define zero?
   (let ((= =))
     (lambda (x) (= x 0))))
 
@@ -147,7 +170,7 @@
 			    (if (< n 0)
 				a
 				(s->l-loop (- n 1) (cons (string-ref s n) a))))))
-	(s->l-loop (- (string-length s) 1) '())))))
+	(s->l-loop (- ( s) 1) '())))))
 
 (define equal?
   (let ((= =) (string->list string->list)
@@ -157,7 +180,7 @@
 	(car car) (cdr cdr)
 	(char->integer char->integer))
     (letrec ((equal?-loop (lambda (x y)
-			    (or 
+			    (or
 			     (and (integer? x) (integer? y) (= x y))
 			     (and (float? x) (float? y) (= x y))
 			     (and (pair? x) (pair? y) (equal?-loop (car x) (car y)) (equal?-loop (cdr x) (cdr y)))

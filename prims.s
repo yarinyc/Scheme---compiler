@@ -30,6 +30,130 @@ cons_prim:
     leave
     ret
 
+set_car_prim:
+    push rbp
+    mov rbp, rsp
+
+    mov rax, PVAR(0)    ;; the pair
+    mov rbx, PVAR(1)    ;; the obj to be the new car
+    mov qword [rax + TYPE_SIZE], rbx
+
+    mov rax, SOB_VOID_ADDRESS   ;; return value is unspecified
+
+.return:
+    leave
+    ret
+
+set_cdr_prim:
+    push rbp
+    mov rbp, rsp
+
+    mov rax, PVAR(0)    ;; the pair
+    mov rbx, PVAR(1)    ;; the obj to be the new cdr
+    mov qword [rax + TYPE_SIZE + WORD_SIZE], rbx
+
+    mov rax, SOB_VOID_ADDRESS   ;; return value is unspecified
+
+.return:
+    leave
+    ret
+
+; *** apply function ***
+apply_prim:
+    push rbp
+    mov rbp, rsp
+
+    mov rdx, qword 0 ; counter
+    mov rcx, qword [rbp + WORD_SIZE*3] ; get n
+    dec rcx
+    mov rsi, qword 0 ; counter for the list elements
+    mov r10, rcx
+    add r10, 4
+    shl r10, 3
+    add r10, rbp
+    mov rbx, qword [r10]; rbx holds the list parameter
+    mov rdi, rbx
+    push SOB_NIL_ADDRESS ;push magic
+
+.countlLoopList: ; count the number of elements in the list
+    cmp rbx, SOB_NIL_ADDRESS
+    je .end2
+    mov rbx, GET_CDR(rbx)
+    inc rsi
+    inc rdx
+    jmp .countlLoopList ; count list
+
+.end2:
+    mov rbx, rdi; rbx has beggining of the list
+    shl rsi, 3 ; size of list
+    sub rsp, rsi; beggining of list in stack
+
+.pushListLoop:
+    cmp rbx, SOB_NIL_ADDRESS
+    je .end3
+    mov r12, GET_CAR(rbx)
+    mov qword [rsp], r12
+    add rsp, 8
+    mov rbx, GET_CDR(rbx)
+    jmp .pushListLoop
+.end3:
+    sub rsp, rsi; rsp in the right place after the list
+
+    mov rcx, qword [rbp + WORD_SIZE*3] ; get n
+    sub rcx, 2
+    cmp rcx, qword 0
+    je .end_loop
+    mov rbx, rcx; index of last arg before list
+
+.pushArgsLoop: ; push all args
+    mov r10, rbx
+    add r10, 4
+    shl r10, 3
+    add r10, rbp
+    push qword [r10]
+    dec rbx
+    inc rdx ; counter for all argument , including list
+    loop .pushArgsLoop, rcx
+.end_loop:
+
+    push rdx ; push n;
+    mov rax, PVAR(0)
+    mov qword [temp_ptr], rax
+    push GET_ENV(rax)
+    push qword [rbp + WORD_SIZE *1] ; push old ret
+
+    ;use memove to recycle stack:
+    mov rbx, qword [rbp + WORD_SIZE*3];to get the n
+    add rbx, 5
+    shl rbx, 3
+    add rdx, 4
+    shl rdx, 3
+    mov rax, rdx; size of second stack
+    sub rbx, rdx
+    add rbx, rbp
+    mov rdi, rbx ; rdi has destination
+    mov rsi, rsp; rsi has source
+    mov rdx, rax ; size of second stack
+    mov rbp, qword [rbp]
+    call memmove
+    mov rsp, rax
+
+    mov rax, qword [temp_ptr]
+    jmp GET_BODY(rax)
+    add rsp, 8*1 ; pop env\n
+    pop rbx ; pop arg count\n
+    shl rbx, 3 ; rbx = rbx * 8\n
+    add rsp, rbx ; pop args\n
+    add rsp, 8 ; (*** end of applicTP - (apply) ***)
+
+.return:
+    leave
+    ret
+
+; *** end of apply function ***
+
+;; *** provided prims: ***
+
 is_boolean:
     push rbp
     mov rbp, rsp

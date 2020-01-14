@@ -275,8 +275,9 @@ module Code_Gen : CODE_GEN = struct
       "string-ref", "string_ref"; "string-set!", "string_set"; "make-string", "make_string";
       "symbol->string", "symbol_to_string";
       "char->integer", "char_to_integer"; "integer->char", "integer_to_char"; "eq?", "is_eq";
-      "+", "bin_add"; "*", "bin_mul"; "-", "bin_sub"; "/", "bin_div"; "<", "bin_lt"; "=", "bin_equ"
-      ; "car", "car_prim" ; "cdr", "cdr_prim" ; "cons", "cons_prim"
+      "+", "bin_add"; "*", "bin_mul"; "-", "bin_sub"; "/", "bin_div"; "<", "bin_lt"; "=", "bin_equ";
+      "car", "car_prim" ; "cdr", "cdr_prim" ; "cons", "cons_prim" ; "set-car!" , "set_car_prim";
+      "set-cdr!" , "set_cdr_prim"; "apply" ,"apply_prim"
     (* you can add yours here *)];;
 
   let make_fvars_tbl asts =
@@ -293,7 +294,7 @@ module Code_Gen : CODE_GEN = struct
 
   let rec findFreeAddress name freeVar =
     match freeVar with
-    | [] -> raise (X_code_gen_error "shouldn't happen (findFreeAddress())")
+    | [] -> raise (X_code_gen_error (Printf.sprintf "shouldn't happen (findFreeAddress(%s))" name))
     | (x,index)::cdr -> if (x = name) then index else (findFreeAddress name cdr);;
 
   let rec findTagDefinition name collection =
@@ -455,7 +456,7 @@ module Code_Gen : CODE_GEN = struct
                               ^ "\tpop rbx ; pop arg count\n"
                               ^ "\tshl rbx, 3 ; rbx = rbx * 8\n"
                               ^ "\tadd rsp, rbx ; pop args\n"
-                              ^ "\tadd rsp, 8\n" in
+                              ^ "\tadd rsp, 8\n" ^ "\t;;(*** end of applic ***)\n" in
             (pushMagic ^ pushedArgs ^ n ^ operator ^ callClosure)
       | ApplicTP'(op, args) ->
             let pushedArgs = String.concat "" (List.map (fun e -> (aux_generate depth paramsLength e) ^ "\tpush rax\n") (List.rev args)) in
@@ -489,7 +490,7 @@ module Code_Gen : CODE_GEN = struct
                               ^ "\tpop rbx ; pop arg count\n"
                               ^ "\tshl rbx, 3 ; rbx = rbx * 8\n"
                               ^ "\tadd rsp, rbx ; pop args\n"
-                              ^ "\tadd rsp, 8\n" in
+                              ^ "\tadd rsp, 8\n" ^ "\t;;(*** end of applicTP ***)\n" in
             (pushMagic ^ pushedArgs ^ n ^ operator ^ callClosure)
       | LambdaSimple'(params,body) ->
             let labelFunc = getLabel "Lfunc" counter_Lfunc in
@@ -507,7 +508,7 @@ module Code_Gen : CODE_GEN = struct
             ^ (Printf.sprintf "\t%s:\n" labelCode)
             ^ "\tpush rbp\n\tmov rbp, rsp\n"
             ^ createBody
-            ^ "\tleave\n" ^ "\tret\n" ^ (Printf.sprintf "\t%s:\n" labelCont)
+            ^ "\tleave\n" ^ "\tret\n" ^ (Printf.sprintf "\t%s:\n" labelCont) ^ "\t;;(*** end of LambdaSimple ***)\n"
       | LambdaOpt'(params,opt,body) ->
             let labelFunc = getLabel "Lfunc" counter_Lfunc in
             let labelCode = getLabel "Lcode" counter_Lcode in
@@ -566,7 +567,7 @@ module Code_Gen : CODE_GEN = struct
             ^ "\tpush rbp\n\tmov rbp, rsp\n"
             ^ shrinkStack
             ^ createBody
-            ^ "\tleave\n" ^ "\tret\n" ^ (Printf.sprintf "\t%s:\n" labelCont)
+            ^ "\tleave\n" ^ "\tret\n" ^ (Printf.sprintf "\t%s:\n" labelCont) ^ "\t;;(*** end of LambdaOpt ***)\n"
       | (Box'(var)) ->  let getVar = (aux_generate depth paramsLength (Var'(var))) in
                         let boxing = "\tMALLOC rbx, 8\n"
                                   ^ "\tmov qword [rbx], rax\n"
