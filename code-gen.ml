@@ -151,7 +151,7 @@ module Code_Gen : CODE_GEN = struct
         | Number(Float(x)) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_FLOAT(%f)\n" x)))]; (counter := (!counter) + 9))
         | Bool(x) -> ()
         | Nil -> ()
-        | Char(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_CHAR('%c')\n" x)))]; (counter := (!counter) + 2))
+        | Char(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_CHAR(%d)\n" (Char.code x))))]; (counter := (!counter) + 2))
         | String(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_LITERAL_STRING \"%s\"\n" x)))]; (counter := (!counter) + 9 + (String.length x)))
         | Symbol(x) -> if(member sexp (!constTbl)) then () else (constTbl:= !constTbl@[((Sexpr(sexp)),(!counter, (Printf.sprintf "MAKE_SYMBOL(const_tbl+%d)\n" (findPtr x constTbl))))]; (counter := (!counter) + 9))
         | Pair(x,y) -> (addToConst x);
@@ -161,7 +161,6 @@ module Code_Gen : CODE_GEN = struct
         | TagRef(x) -> ()
 
       and member exp list =
-        (* let newExp = match exp with | Sexpr(x) -> x | _-> raise (X_code_gen_error "member expected only type sexpr") in *)
         match list with
         | [] -> false
         | (Void,(off,str))::xs -> (member exp xs)
@@ -268,7 +267,7 @@ module Code_Gen : CODE_GEN = struct
       | _ -> [] in
     (run asts counter);;
 
-    let aux_primitive_names_to_labels = 
+    let aux_primitive_names_to_labels =
       ["boolean?", "is_boolean"; "float?", "is_float"; "integer?", "is_integer"; "pair?", "is_pair";
       "null?", "is_null"; "char?", "is_char"; "string?", "is_string";
       "procedure?", "is_procedure"; "symbol?", "is_symbol"; "string-length", "string_length";
@@ -361,23 +360,6 @@ module Code_Gen : CODE_GEN = struct
     let newLabel = (label_name ^ (string_of_int counter)) in
     (label_counter := !label_counter + 1) ; newLabel;;
 
-  (* let rec extEnv currDepth =
-    if(currDepth = 0)
-    then (createArgsVector ())
-    else (Printf.sprintf "\tmov rbx, qword [rdi + WORD_SIZE*%d]\n\tmov qword [rsi + WORD_SIZE*%d], rbx\n" (currDepth-1) currDepth) ^ (extEnv (currDepth - 1))
-  and createArgsVector () =
-      let myLoop = getLabel "myLoop" counter_Lloop in
-      let endLoop = "end"^myLoop in
-     "\tmov rcx, qword [rbp + WORD_SIZE*3]\n" ^ (Printf.sprintf "\tcmp rcx, 0\n\tje %s\n" endLoop)
-     ^ "\tmov rdx, rcx\n" ^ "\tshl rdx, 3\n" ^ "\tMALLOC rbx, rdx\n"
-     ^ (Printf.sprintf "\t%s:\n" myLoop) ^
-     "\t\tmov rdx, rcx\n" ^
-     "\t\tdec rdx\n" ^
-     "\t\tmov rdx, PVAR(rdx)\n" ^
-     "\t\tmov rax, rcx\n\t\tdec rax\n" ^
-     "\t\tmov qword [rbx + WORD_SIZE*rax], rdx\n" ^
-     (Printf.sprintf "\t\tloop %s, rcx\n" myLoop) ^"\t mov qword[rsi], rbx\n"^ Printf.sprintf "\t%s:\n" endLoop;; *)
-
   let rec extEnv currDepth pLength =
       if(currDepth = 0)
       then if(pLength = 0)
@@ -390,11 +372,8 @@ module Code_Gen : CODE_GEN = struct
       if(pLength = 0)
       then ""
       else (Printf.sprintf "\tmov rdi, PVAR(%d)\n" (pLength-1))
-           ^ (Printf.sprintf "\tmov [rbx + WORD_SIZE*%d], rdi \n" (pLength-1))
+           ^ (Printf.sprintf "\tmov [rbx + WORD_SIZE*%d], rdi\n" (pLength-1))
            ^ (createArgsVector (pLength -1));;
-
-
-
 
   let generate consts fvars e =
     let tagCollection = getCollection e (ref []) in
@@ -408,13 +387,13 @@ module Code_Gen : CODE_GEN = struct
                       let address = (findAddress exp consts) in
                       (Printf.sprintf "\tmov rax, (const_tbl + %d)\n" address)
       | Var'(VarParam(_, minor)) -> (Printf.sprintf "\tmov rax, qword [rbp + WORD_SIZE*(4 + %d)]\n" minor)
-      | Set'(Var'(VarParam(_, minor)),exp) -> String.concat "" [(aux_generate depth paramsLength exp); (Printf.sprintf "\tmov qword [rbp + WORD_SIZE*(4+%d)], rax \n
-                                                                           \tmov rax, SOB_VOID_ADDRESS \n" minor)]
+      | Set'(Var'(VarParam(_, minor)),exp) -> String.concat "" [(aux_generate depth paramsLength exp);
+      (Printf.sprintf "\tmov qword [rbp + WORD_SIZE*(4+%d)], rax\n\tmov rax, SOB_VOID_ADDRESS\n" minor)]
       | Var'(VarBound(_, major, minor)) ->
       (Printf.sprintf "\tmov rax, qword [rbp + WORD_SIZE*2]\n\tmov rax, qword [rax + WORD_SIZE*%d]\n\tmov rax, qword [rax + WORD_SIZE*%d]\n" major minor)
-      | Set'(Var'(VarBound(_,major,minor)),exp) -> String.concat "" [(aux_generate depth paramsLength exp); (Printf.sprintf "\tmov rbx, qword [rbp + WORD_SIZE*2] \n
-                                                                                   \tmov rbx, qword [rax + WORD_SIZE*%d] \n
-                                                                                   \tmov qword [rbx + WORD_SIZE*%d], rax \n
+      | Set'(Var'(VarBound(_,major,minor)),exp) -> String.concat "" [(aux_generate depth paramsLength exp); (Printf.sprintf "\tmov rbx, qword [rbp + WORD_SIZE*2]\n
+                                                                                   \tmov rbx, qword [rax + WORD_SIZE*%d]\n
+                                                                                   \tmov qword [rbx + WORD_SIZE*%d], rax\n
                                                                                    \tmov rax, SOB_VOID_ADDRESS\n" major minor)]
       | Var'(VarFree(v)) -> let address = findFreeAddress v fvars in
                             (Printf.sprintf "\tmov rax, qword [fvar_tbl + WORD_SIZE*%d]\n" address)
@@ -427,10 +406,10 @@ module Code_Gen : CODE_GEN = struct
       | Or'(exps) -> let (list,last) = (splitLast exps) in
                      let labelExit = (getLabel "Lexit" counter_Lexit) in
                     (String.concat ""  ((List.map (fun(x) -> String.concat "" [(aux_generate depth paramsLength x);
-                             "\tcmp rax, SOB_FALSE_ADDRESS \n"; "\tjne " ^ labelExit ^ "\n"]) list) @ [(aux_generate depth paramsLength last); "\t" ^ labelExit ^ ":\n"]))
+                             "\tcmp rax, SOB_FALSE_ADDRESS\n"; "\tjne " ^ labelExit ^ "\n"]) list) @ [(aux_generate depth paramsLength last); "\t" ^ labelExit ^ ":\n"]))
       | If'(test,dit,dif) -> let labelExit = (getLabel "Lexit" counter_Lexit) in
                              let labelElse = (getLabel "Lelse" counter_Lelse) in
-                              ((aux_generate depth paramsLength test) ^ "\tcmp rax, SOB_FALSE_ADDRESS \n\tje " ^ labelElse ^ "\n" ^
+                              ((aux_generate depth paramsLength test) ^ "\tcmp rax, SOB_FALSE_ADDRESS\n\tje " ^ labelElse ^ "\n" ^
                               (aux_generate depth paramsLength dit) ^ "\tjmp " ^ labelExit ^"\n\t" ^ labelElse ^ ":\n" ^
                               (aux_generate depth paramsLength dif) ^ "\t" ^ labelExit ^ ":\n")
       | BoxGet'(v) -> (aux_generate depth paramsLength (Var'(v))) ^ "\tmov rax, qword [rax]\n"
@@ -472,7 +451,7 @@ module Code_Gen : CODE_GEN = struct
                               ^ "\tpush GET_ENV(rax)\n"
                               ^ "\tpush qword [rbp +WORD_SIZE]\n"
 
-                              ^ "\tmov rbx, [rbp + WORD_SIZE*3];to get the n \n"
+                              ^ "\tmov rbx, [rbp + WORD_SIZE*3];to get the n\n"
                               ^ "\tadd rbx, 5\n"
                               ^ "\tshl rbx, 3 ; size of first frame\n"
                               ^ (Printf.sprintf "\tsub rbx, WORD_SIZE*(4 + %d) ; (a-b)\n" (List.length args))
@@ -501,7 +480,7 @@ module Code_Gen : CODE_GEN = struct
                             else (Printf.sprintf "\tMALLOC rsi, (WORD_SIZE*%d)\n" (depth+1)) (*rsi holds ExtEnv ptr*)
                                   ^ "\tmov rdi, qword [rbp + WORD_SIZE*2]\n" ^ (extEnv depth paramsLength) ) in (*rdi holds current env ptr*)
             let createBody = aux_generate (depth+1) (List.length params) body in
-            "\t" ^ labelFunc ^ ": ;(LambdaSimple)\n"
+            "\t" ^ labelFunc ^ (Printf.sprintf ": ;(LambdaSimple (%s))\n" (String.concat " " params))
             ^ createEnv
             ^ (Printf.sprintf "\tMAKE_CLOSURE(rax, rsi, %s)\n" labelCode)
             ^ (Printf.sprintf "\tjmp %s\n" labelCont)

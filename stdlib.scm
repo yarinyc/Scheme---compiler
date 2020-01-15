@@ -25,29 +25,47 @@
 									   (map cdr ls) ) )))))
 		fold-loop)))
 
-(define auxAppend
-	(lambda (l1 l2)
-		(if (null? (car l1))
-		 l2
-		 (cons (car l1) (auxAppend (cdr l1) l2)))))
-
 (define fold-right
 	(let ((null? null?)
 	  (car car) (cdr cdr)
 	  (apply apply) (map map))
-		(letrec ((fold-loop (lambda (f acc l . ls)
-				(if(null? l)
-				acc
-				(if(null? ls)
-					(f (car l) (fold-loop f acc (cdr l)))
-					(apply f (car l)
-						(auxAppend	(map car ls)
-									(cons (apply fold-loop f acc (cdr l) (map cdr ls)) '() )) )
-					 )))))
+		(letrec ((auxAppend (lambda (l1 l2)
+					(if (null? l1)
+					l2
+					(cons (car l1) (auxAppend (cdr l1) l2)))))
+				(fold-loop (lambda (f acc l . ls)
+					(if(null? l)
+					acc
+					(if(null? ls)
+						(f (car l) (fold-loop f acc (cdr l)))
+						(apply f (car l)
+							(auxAppend	(map car ls)
+										(cons (apply fold-loop f acc (cdr l) (map cdr ls)) '() )) )
+						)))))
 		fold-loop)))
 
-;(define cons* ())
-
+(define cons*
+	(let ((null? null?) (car car) (cdr cdr)
+		  (fold-right fold-right) (cons cons))
+			(letrec	((last (lambda (l)
+							(if (null? l)
+							l
+							(if (null? (cdr l))
+								(car l)
+								(last (cdr l))))))
+					(exceptLast (lambda (l)
+							(if (null? l)
+							l
+							(if (null? (cdr l))
+								'()
+								(cons (car l) (exceptLast (cdr l)))))))
+					(cons-impl (lambda args
+						(if (null? args)
+						args
+						(if (null? (cdr args))
+							(car args)
+							(fold-right cons (last args) (exceptLast args)))))))
+	cons-impl)))
 
 (define append
   (let ((null? null?)
@@ -62,7 +80,7 @@
 
 (define list (lambda x x))
 
-(define list? 
+(define list?
   (let ((null? null?)
 	(pair? pair?)
 	(cdr cdr))
@@ -148,7 +166,7 @@
   (let ((null? null?) (< <) (= =)
 	(not not) (car car) (cdr cdr))
     (letrec ((>-loop (lambda (element lst)
-		     (if (null? lst) 
+		     (if (null? lst)
 			 #t
 			 (and (not (or
 				    (< element (car lst))
