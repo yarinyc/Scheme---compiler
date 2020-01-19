@@ -388,13 +388,11 @@ module Code_Gen : CODE_GEN = struct
                       (Printf.sprintf "\tmov rax, (const_tbl + %d)\n" address)
       | Var'(VarParam(_, minor)) -> (Printf.sprintf "\tmov rax, qword [rbp + WORD_SIZE*(4 + %d)]\n" minor)
       | Set'(Var'(VarParam(_, minor)),exp) -> String.concat "" [(aux_generate depth paramsLength exp);
-      (Printf.sprintf "\tmov qword [rbp + WORD_SIZE*(4+%d)], rax\n\tmov rax, SOB_VOID_ADDRESS\n" minor)]
+        (Printf.sprintf "\tmov qword [rbp + WORD_SIZE*(4+%d)], rax\n\tmov rax, SOB_VOID_ADDRESS\n" minor)]
       | Var'(VarBound(_, major, minor)) ->
-      (Printf.sprintf "\tmov rax, qword [rbp + WORD_SIZE*2]\n\tmov rax, qword [rax + WORD_SIZE*%d]\n\tmov rax, qword [rax + WORD_SIZE*%d]\n" major minor)
-      | Set'(Var'(VarBound(_,major,minor)),exp) -> String.concat "" [(aux_generate depth paramsLength exp); (Printf.sprintf "\tmov rbx, qword [rbp + WORD_SIZE*2]\n
-                                                                                   \tmov rbx, qword [rax + WORD_SIZE*%d]\n
-                                                                                   \tmov qword [rbx + WORD_SIZE*%d], rax\n
-                                                                                   \tmov rax, SOB_VOID_ADDRESS\n" major minor)]
+        (Printf.sprintf "\tmov rax, qword [rbp + WORD_SIZE*2]\n\tmov rax, qword [rax + WORD_SIZE*%d]\n\tmov rax, qword [rax + WORD_SIZE*%d]\n" major minor)
+      | Set'(Var'(VarBound(_,major,minor)),exp) -> (aux_generate depth paramsLength exp) ^
+        (Printf.sprintf "\tmov rbx, qword [rbp + WORD_SIZE*2]\n\tmov rbx, qword [rbx + WORD_SIZE*%d]\n\tmov qword [rbx + WORD_SIZE*%d], rax\n\tmov rax, SOB_VOID_ADDRESS\n" major minor)
       | Var'(VarFree(v)) -> let address = findFreeAddress v fvars in
                             (Printf.sprintf "\tmov rax, qword [fvar_tbl + WORD_SIZE*%d]\n" address)
       | Set'(Var'(VarFree(v)),exp) ->
